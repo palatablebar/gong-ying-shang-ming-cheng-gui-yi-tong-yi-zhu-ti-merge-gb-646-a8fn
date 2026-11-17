@@ -23,6 +23,10 @@ SAMPLE_FILES = (
     "erp_f_blank_rows.csv",
 )
 
+# 编码复用接替演示批次：在六份主档之上再加一份带主体状态与未结余额的名单。
+# 不并入默认批次，避免改变既有样例的对账数字。
+SUCCESSION_FILES = SAMPLE_FILES + ("succession_g_lifecycle.csv",)
+
 ENCODING_CHAIN = ("utf-8-sig", "utf-8", "gb18030")
 
 # 列契约：字段名 -> (是否必填, 说明单位)
@@ -37,6 +41,9 @@ COLUMNS = (
     ("ref_master_id", False),
     ("ytd_amount", False),
     ("last_update", False),
+    # 主体生命周期与未结余额：可选列，缺列时按“未提供”处理，不影响旧批次。
+    ("entity_status", False),
+    ("open_balance", False),
 )
 
 COLUMN_ALIASES = {
@@ -54,6 +61,10 @@ COLUMN_ALIASES = {
     "主档号": "ref_master_id",
     "本年累计": "ytd_amount",
     "更新时间": "last_update",
+    "主体状态": "entity_status",
+    "状态": "entity_status",
+    "未结余额": "open_balance",
+    "余额": "open_balance",
 }
 
 # 空值哨兵：集中定义，与"空串"语义分开（空串表示确实没有税号）。
@@ -70,3 +81,17 @@ MAX_CANDIDATES = 4000
 
 TZ_DISPLAY = "Asia/Shanghai"
 PAGE_SIZE = 60
+
+# 编码复用接替判定：
+# - 只有新主体带“受让/接替”等明确证据，或旧主体状态为注销/吊销/停业且
+#   名称为同一主体时才判接替；仅名称相近不足以让旧账随编码转给新主体。
+# - 新主体税号与老主体不同是默认前提；税号相同则属于同一主体改名/补录，
+#   走普通合并，不进入接替流程。
+SUCCESSION_NAME_THRESHOLD = Decimal("0.92")
+DORMANT_STATUSES = frozenset({"注销", "已注销", "吊销", "已吊销", "停业", "已停业",
+                              "撤销", "已撤销", "注销登记", "歇业"})
+ACTIVE_STATUSES = frozenset({"存续", "在营", "开业", "正常", "在业", "存续（在营、开业、在册）"})
+# 明确的主体接替证据词：新主体名称或来源系统备注中出现即视为集团重新分配。
+SUCCESSION_MARKERS = ("接替", "承继", "继受", "受让", "承接", "并入", "吸收合并")
+# 新主体编码复用旧编码时，允许的“名称相近”仅为辅助证据，不单独成立接替。
+SUCCESSION_EVIDENCE_MIN = 2

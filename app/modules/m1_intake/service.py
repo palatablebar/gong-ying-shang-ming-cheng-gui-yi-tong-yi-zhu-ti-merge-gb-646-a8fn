@@ -27,7 +27,7 @@ from ...reasons import (
 from . import columns, decode, reader
 
 PAYLOAD_FIELDS = ("supplier_no", "raw_name", "tax_id", "city", "bank_account",
-                  "erp", "ref_master_id", "ytd_amount")
+                  "erp", "ref_master_id", "ytd_amount", "open_balance", "entity_status")
 
 
 def _safe_name(name: str) -> str:
@@ -51,6 +51,7 @@ def _quarantine(source, line_no, raw, code, detail=""):
 def _row_record(index, cells, raw, source, line_no):
     values = {name: columns.cell(cells, index, name) for name in columns.COLUMN_NAMES}
     amount, amount_flags, amount_error = columns.parse_amount(values["ytd_amount"])
+    balance, balance_error = columns.parse_balance(values.get("open_balance", ""))
     tax_id, tax_flags = columns.clean_tax(values["tax_id"])
     return {
         "supplier_id": columns.clean_code(values["supplier_id"]),
@@ -62,11 +63,13 @@ def _row_record(index, cells, raw, source, line_no):
         "erp": columns.clean_text(values["erp_source"]),
         "ref_master_id": columns.clean_code(values["ref_master_id"]),
         "ytd_amount": str(amount if amount is not None else "0.00"),
+        "open_balance": str(balance if balance is not None else "0.00"),
+        "entity_status": columns.clean_status(values.get("entity_status", "")),
         "flags": json.dumps(sorted(set(amount_flags + tax_flags)), ensure_ascii=False),
         "source_file": source,
         "line_no": line_no,
         "raw_line": raw,
-    }, amount_error
+    }, (amount_error or balance_error)
 
 
 def ingest(files=None, force: bool = False) -> dict:

@@ -91,6 +91,24 @@ def parse_amount(raw: str):
     return amount.quantize(CENT, rounding=ROUND_HALF_UP), flags, None
 
 
+def parse_balance(raw: str):
+    """未结余额：缺列/空值按 0.00；解析失败返回 None，由调用方隔离该行。"""
+    value = (raw or "").strip()
+    if value == "" or is_sentinel(value):
+        return Decimal("0.00"), None
+    normalized = value.translate(_FULLWIDTH_DIGITS)
+    normalized = normalized.replace(",", "").replace("，", "").replace("¥", "").replace(" ", "")
+    try:
+        amount = Decimal(normalized)
+    except InvalidOperation:
+        return None, Q_AMOUNT_INVALID
+    return amount.quantize(CENT, rounding=ROUND_HALF_UP), None
+
+
+def clean_status(raw: str) -> str:
+    return clean_text(raw)
+
+
 def identical(left: dict, right: dict, fields) -> bool:
     return all(str(left.get(name, "")) == str(right.get(name, "")) for name in fields)
 

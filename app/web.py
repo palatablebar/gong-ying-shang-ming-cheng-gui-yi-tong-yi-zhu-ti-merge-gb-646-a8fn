@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from . import store
-from .config import APP_NAME, RULE_VERSION, TZ_DISPLAY
+from .config import APP_NAME, RULE_VERSION, SUCCESSION_FILES, TZ_DISPLAY
 from .manifest import parse_utc
 from .reasons import all_codes
 from .modules.m1_intake import service as intake_service
@@ -20,6 +20,7 @@ from .modules.m3_blocks import service as block_service
 from .modules.m4_pairs import service as pair_service
 from .modules.m5_clusters import service as cluster_service
 from .modules.m6_reviews import service as review_service
+from .modules.m8_succession import service as succession_service
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -30,6 +31,7 @@ NAV = (
     ("pairs", "候选对", "/pairs"),
     ("clusters", "合并簇", "/clusters"),
     ("reviews", "复核", "/reviews"),
+    ("succession", "接替", "/succession"),
     ("export", "导出", "/export"),
 )
 
@@ -177,9 +179,11 @@ def page_pairs(request: Request):
     run_id = run["run_id"]
     pair_service.ensure_pairs(run_id)
     pairs = store.list_pairs(run_id)
+    reuse = [row for row in pair_service.details(run_id) if row["reason_code"] == "P_CODE_REUSE"]
     context = base_context(request, "pairs", "候选对", run)
     context.update({
         "pairs": pairs[:60],
+        "reuse_pairs": reuse,
         "stats": pair_service.verdict_stats(run_id),
         "blocks": store.list_blocks(run_id)[:10],
         "block_summary": block_service.summary(run_id),
@@ -218,8 +222,51 @@ def page_reviews(request: Request):
         "decisions": store.list_decisions(run_id)[:40],
         "references": review_service.reference_issues(run_id),
         "runs": run_briefs(8),
+        "succession_cases": succession_service.list_cases(run_id),
+        "succession_stats": succession_service.statistics(run_id),
     })
     return render(request, "reviews.html", context)
+
+
+@router.get("/succession", response_class=HTMLResponse)
+def page_succession(request: Request, batch: str = ""):
+    if batch == "lifecycle":
+        run = intake_service.ingest(files=SUCCESSION_FILES)
+    else:
+        run = current_run()
+    run_id = run["run_id"]
+    cluster_service.ensure_clusters(run_id)
+    cases = succession_service.list_cases(run_id)
+    plan = succession_service.build_plan(run_id)
+    master = succession_service.master()
+    context = base_context(request, "succession", "编码复用接替", run)
+    context.update({
+        "cases": cases,
+        "stats": succession_service.statistics(run_id),
+        "plan": plan,
+        "master": master,
+        "receipts": succession_service.receipts(8),
+        "snapshots": store.list_snapshots(),
+        "succession_reasons": {
+            "S_SUCCESSOR_CONFIRMED": "证据充分，判主体接替",
+            "S_SUCCESSOR_CANDIDATE": "疑似接替，需人工确认",
+            "S_NEW_SEPARATE": "新主体另行启用",
+        },
+        "impact_labels": {
+            "S_CODE_REUSED": "编码复用",
+            "S_OLD_UNSETTLED": "旧主体未结余额",
+            "S_OLD_RETIRED": "旧主体退役",
+            "S_BALANCE_TRANSFER": "余额结转新主体",
+            "S_BALANCE_RETAINED": "余额留旧主体",
+            "S_NEW_TAX_CHANGED": "新主体税号变化",
+            "S_NEW_BANK_CHANGED": "新主体开户行变化",
+            "S_NAME_MERGE_BLOCKED": "禁止按名称合并",
+            "S_ACCOUNT_BLOCKED": "账户未核验",
+            "S_DUPLICATE_PAYMENT_RISK": "重复付款风险",
+            "S_NEW_SEPARATE": "新主体另行启用",
+        },
+    })
+    return render(request, "succession.html", context)
 
 
 @router.get("/export", response_class=HTMLResponse)

@@ -34,6 +34,33 @@
 
 <section class="panel">
   <div class="panel-head">
+    <h2 class="panel-title">编码复用接替</h2>
+    <div class="panel-num">{{ succession_stats.total }} 案 · 待判 {{ succession_stats.pending }} · 已批准 {{ succession_stats.approved }} · 已发布 {{ succession_stats.published }}</div>
+    <a class="btn btn-link" href="/succession">去接替页</a>
+  </div>
+  {% if succession_cases %}
+  <table class="tbl tbl-tight">
+    <thead><tr><th>案件</th><th>编码</th><th>旧 → 新</th><th>判定</th><th>状态</th><th class="num">附余额(元)</th></tr></thead>
+    <tbody>
+      {% for item in succession_cases %}
+      <tr>
+        <td class="mono">{{ item.case_id }}</td>
+        <td class="mono">{{ item.code }}</td>
+        <td class="mono">{{ item.old_id }} → {{ item.new_id }}</td>
+        <td>{{ '接替' if item.effective_verdict == 'successor' else '另行启用' }}</td>
+        <td>{{ {'pending': '待判', 'approved': '已批准', 'published': '已发布'}.get(item.state, item.state) }}</td>
+        <td class="num">{{ item.bound_balance|money }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">当前批次没有编码复用案件；接替页可载入生命周期样例查看。</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
     <h2 class="panel-title">引用异常</h2>
     <div class="panel-num">{{ references|length }} 条 · {{ stats.reference_codes|join(' ') }}</div>
   </div>

@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from ... import store
 from ...errors import NotFound
-from ...reasons import C_CLUSTER_CONFLICT, P_TAX_CONFLICT, V_UNKNOWN_RUN
+from ...reasons import C_CLUSTER_CONFLICT, P_CODE_REUSE, P_TAX_CONFLICT, V_UNKNOWN_RUN
 from ..m4_pairs import service as pair_service
 from . import allocate, represent, unionfind
 
@@ -27,11 +27,15 @@ def ensure_clusters(run_id: str) -> dict:
         dsu.add(supplier_id)
 
     for pair in store.list_pairs(run_id):
+        if pair["reason_code"] == P_CODE_REUSE and not decisions.get(pair["pair_id"]):
+            # 编码复用必须先走 M8 接替复核，普通候选对流程不得按名称合并。
+            continue
         decision = decisions.get(pair["pair_id"])
         if decision:
             if decision["decision"] == "keep":
                 continue
-            if decision["decision"] == "merge" and pair["reason_code"] != P_TAX_CONFLICT:
+            if decision["decision"] == "merge" and pair["reason_code"] not in (
+                    P_TAX_CONFLICT, P_CODE_REUSE):
                 dsu.union(pair["left_id"], pair["right_id"])
             continue
         if pair["verdict"] == "auto":

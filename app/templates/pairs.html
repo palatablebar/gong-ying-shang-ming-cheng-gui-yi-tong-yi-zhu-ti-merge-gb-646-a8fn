@@ -37,6 +37,33 @@
 
 <section class="panel">
   <div class="panel-head">
+    <h2 class="panel-title">编码复用对（不按名称合并）</h2>
+    <div class="panel-num">{{ reuse_pairs|length }} 对 · 需在接替页处理</div>
+    <a class="btn btn-link" href="/succession">去接替页</a>
+  </div>
+  {% if reuse_pairs %}
+  <table class="tbl tbl-dense">
+    <thead><tr><th>候选对</th><th>左侧</th><th>右侧</th><th class="num">得分</th><th>结论</th><th>依据</th></tr></thead>
+    <tbody>
+      {% for pair in reuse_pairs %}
+      <tr>
+        <td class="mono">{{ pair.pair_id }}</td>
+        <td class="clip">{{ pair.left_id }} {{ pair.left_name }}<span class="sub mono">{{ pair.left_tax or '无税号' }}</span></td>
+        <td class="clip">{{ pair.right_id }} {{ pair.right_name }}<span class="sub mono">{{ pair.right_tax or '无税号' }}</span></td>
+        <td class="num strong">{{ pair.score|score }}</td>
+        <td><span class="tag tag-reject">编码复用</span></td>
+        <td class="mono clip" title="{{ pair.detail }}">{{ pair.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">当前批次没有编码复用对。</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
     <h2 class="panel-title">得分明细</h2>
     <div class="panel-num">前 {{ pairs|length }} 对</div>
   </div>

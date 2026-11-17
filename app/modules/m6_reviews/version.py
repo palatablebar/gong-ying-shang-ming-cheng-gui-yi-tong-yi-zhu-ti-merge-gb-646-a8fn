@@ -4,7 +4,13 @@ from __future__ import annotations
 from ... import store
 from ...errors import Conflict, DomainError, NotFound
 from ...manifest import utc_iso, utc_now
-from ...reasons import P_TAX_CONFLICT, V_BAD_DECISION, V_STALE_DECISION, V_UNKNOWN_PAIR
+from ...reasons import (
+    P_CODE_REUSE,
+    P_TAX_CONFLICT,
+    V_BAD_DECISION,
+    V_STALE_DECISION,
+    V_UNKNOWN_PAIR,
+)
 
 ALLOWED = ("merge", "keep")
 
@@ -21,8 +27,8 @@ def decide(run_id: str, pair_id: str, decision: str, expected_version: int,
     pair = store.get_pair(run_id, pair_id)
     if pair is None:
         raise NotFound(V_UNKNOWN_PAIR, pair_id)
-    if decision == "merge" and pair["reason_code"] == P_TAX_CONFLICT:
-        raise DomainError(V_BAD_DECISION, "税号冲突不可合并")
+    if decision == "merge" and pair["reason_code"] in (P_TAX_CONFLICT, P_CODE_REUSE):
+        raise DomainError(V_BAD_DECISION, "编码复用或税号冲突不可按名称合并")
     current = current_version(run_id, pair_id)
     if expected_version != current:
         raise Conflict(V_STALE_DECISION, f"当前版本 {current}")

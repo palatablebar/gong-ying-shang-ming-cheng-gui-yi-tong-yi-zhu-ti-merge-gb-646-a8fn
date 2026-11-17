@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="panel">
+  <div class="panel-head">
+    <h1 class="panel-title">编码复用接替</h1>
+    <div class="panel-num">
+      {{ stats.total }} 案 · 待判 {{ stats.pending }} · 已批准 {{ stats.approved }} · 已发布 {{ stats.published }}
+      · 附余额 {{ stats.balance|money }} 元
+    </div>
+    <a class="btn btn-link" href="/succession?batch=lifecycle">载入生命周期样例</a>
+  </div>
+  <p class="notice">
+    编码在旧主体注销后被重新分配：<b>税号相同</b>属同一主体补录，走普通合并；
+    <b>税号不同且旧主体已注销、名称一致或有接替标记</b>才判主体接替，旧主体退役、余额结转；
+    其余一律新主体另行启用、余额留在旧主体；旧主体已注销的同步退役，仍存续的保留可结算状态。
+    名称相同但税号不同时，候选对阶段已阻断按名称合并。
+  </p>
+  {% if not cases %}
+  <p class="empty">当前批次没有编码复用案件。默认六份样例中编码唯一；点击右上角载入生命周期样例查看四类情形。</p>
+  {% endif %}
+</section>
+
+{% for case in cases %}
+<section class="panel" id="{{ case.case_id }}">
+  <div class="panel-head">
+    <h2 class="panel-title">{{ case.case_id }} · 编码 {{ case.code }}</h2>
+    <div class="panel-num">
+      <span class="tag {{ 'tag-ok' if case.effective_verdict == 'successor' else 'tag-warn' }}">
+        {{ succession_reasons.get(case.reason_code, case.reason_code) }}
+      </span>
+      · 状态 {{ {'pending': '待判', 'approved': '已批准', 'published': '已发布'}.get(case.state, case.state) }}
+      · 版本 {{ case.version }}
+    </div>
+    {% if case.state != 'published' %}
+    <div class="btn-row">
+      <button type="button" class="btn btn-sm" data-scase="{{ case.case_id }}"
+              data-verdict="successor" data-version="{{ case.version }}">判定接替</button>
+      <button type="button" class="btn btn-sm btn-ghost" data-scase="{{ case.case_id }}"
+              data-verdict="separate" data-version="{{ case.version }}">另行启用</button>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="grid-two">
+    <table class="tbl tbl-tight">
+      <thead><tr><th>接替依据</th><th>值</th></tr></thead>
+      <tbody>
+        <tr><td>旧主体状态</td><td>{{ case.evidence.old_status or '未提供' }}{% if case.evidence.old_dormant %} · <span class="tag tag-warn">已注销</span>{% endif %}</td></tr>
+        <tr><td>名称比对</td><td>{{ '一致' if case.evidence.same_name else '不一致' }} · 得分 {{ case.evidence.name_score }}</td></tr>
+        <tr><td>接替标记词</td><td>{{ '有' if case.evidence.succession_marker else '无' }}</td></tr>
+        <tr><td>税号变化</td><td class="mono">{{ case.evidence.old_tax or '—' }} → {{ case.evidence.new_tax or '—' }}</td></tr>
+        <tr><td>账户变化</td><td>{{ '有' if case.evidence.bank_changed else '无' }}</td></tr>
+        <tr><td>证据支撑数</td><td>{{ case.evidence.support }} / 3（需 ≥2 才能判接替）</td></tr>
+      </tbody>
+    </table>
+    <table class="tbl tbl-tight">
+      <thead><tr><th>主体</th><th>旧主体</th><th>新主体</th></tr></thead>
+      <tbody>
+        <tr><td>记录号</td><td class="mono">{{ case.old_id }}</td><td class="mono">{{ case.new_id }}</td></tr>
+        <tr><td>名称</td><td class="clip">{{ case.evidence.old_name }}</td><td class="clip">{{ case.evidence.new_name }}</td></tr>
+        <tr><td>税号</td><td class="mono">{{ case.old.tax_id or '—' }}</td><td class="mono">{{ case.new.tax_id or '—' }}</td></tr>
+        <tr><td>开户行</td><td class="mono">{{ case.old.bank_account or '—' }}</td><td class="mono">{{ case.new.bank_account or '—' }}</td></tr>
+        <tr><td>未结余额</td><td class="num">{{ case.old.open_balance|money }}</td><td class="num">{{ case.new.open_balance|money }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <table class="tbl tbl-dense">
+    <thead><tr><th>受影响记录</th><th>侧</th><th>影响类型</th><th>字段</th><th>原值</th><th>新值</th><th class="num">金额</th><th>说明</th></tr></thead>
+    <tbody>
+      {% for item in case.impacts %}
+      <tr>
+        <td class="mono">{{ item.supplier_id }}</td>
+        <td>{{ '旧主体' if item.side == 'old' else '新主体' }}</td>
+        <td class="mono">{{ item.impact_code }}</td>
+        <td>{{ item.field }}</td>
+        <td class="mono clip">{{ item.old_value or '—' }}</td>
+        <td class="mono clip">{{ item.new_value or '—' }}</td>
+        <td class="num">{{ item.amount|money if item.amount != '0.00' else '—' }}</td>
+        <td>{{ item.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h2 class="panel-title">发布前复核：余额归属与对账</h2>
+    <div class="panel-num">
+      正式主数据当前版本 {{ master.version }} · 发布前版本 {{ plan.prior_version }}
+      {% if plan.ok %}<span class="tag tag-ok">可发布</span>{% else %}<span class="tag tag-bad">未就绪</span>{% endif %}
+    </div>
+  </div>
+  <table class="tbl tbl-tight">
+    <thead><tr><th>对账项</th><th class="num">左</th><th class="num">右</th><th>结论</th></tr></thead>
+    <tbody>
+      {% for check in plan.checks %}
+      <tr>
+        <td>{{ check.name }}</td>
+        <td class="num mono">{{ check.left }}</td>
+        <td class="num mono">{{ check.right }}</td>
+        <td><span class="tag {{ 'tag-ok' if check.ok else 'tag-bad' }}">{{ '通过' if check.ok else '异常' }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if plan.blocked %}
+  <table class="tbl tbl-tight">
+    <thead><tr><th>阻断案件</th><th>原因码</th><th>说明</th></tr></thead>
+    <tbody>
+      {% for item in plan.blocked %}
+      <tr><td class="mono">{{ item.case_id }}</td><td class="mono">{{ item.reason_code }}</td><td>{{ item.detail }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  <table class="tbl tbl-dense">
+    <thead><tr><th>主体</th><th>编码</th><th>名称</th><th>税号</th><th>状态</th><th>动作</th><th class="num">未结余额(元)</th><th>接替依据</th></tr></thead>
+    <tbody>
+      {% for entity in plan.entities %}
+      {% if entity.origin != 'ledger' or entity.action != 'keep' or entity.balance != '0.00' %}
+      <tr>
+        <td class="mono">{{ entity.entity_id }}</td>
+        <td class="mono">{{ entity.supplier_no }}</td>
+        <td class="clip">{{ entity.name }}</td>
+        <td class="mono">{{ entity.tax_id or '—' }}</td>
+        <td>{{ entity.status }}</td>
+        <td class="mono">{{ entity.action }}</td>
+        <td class="num">{{ entity.balance|money }}</td>
+        <td class="mono">{{ entity.basis or '—' }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="btn-row">
+    <button type="button" class="btn" data-publish="1"
+            data-sha="{{ plan.payload_sha256 }}" data-prior="{{ plan.prior_version }}"
+            {% if not plan.ok %}disabled{% endif %}>一次性切换发布</button>
+    <span class="stat-line">计划摘要 {{ plan.payload_sha256[:16] }} · 余额合计 {{ plan.entity_balance|money }}</span>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2 class="panel-title">正式主数据与台账</h2>
+    <div class="panel-num">版本 {{ master.version }} · {{ master.entities|length }} 个主体</div>
+    {% if master.version %}
+    <a class="btn btn-link" href="/api/succession/master.csv" download>导出当前版本</a>
+    {% endif %}
+  </div>
+  {% if master.version %}
+  <table class="tbl tbl-dense">
+    <thead><tr><th>主体</th><th>编码</th><th>名称</th><th>税号</th><th>状态</th><th class="num">未结余额(元)</th><th>依据</th></tr></thead>
+    <tbody>
+      {% for entity in master.entities %}
+      {% if entity.status != 'active' or entity.balance != '0.00' %}
+      <tr>
+        <td class="mono">{{ entity.entity_id }}</td>
+        <td class="mono">{{ entity.supplier_no }}</td>
+        <td class="clip">{{ entity.name }}</td>
+        <td class="mono">{{ entity.tax_id or '—' }}</td>
+        <td>{{ entity.status }}</td>
+        <td class="num">{{ entity.balance|money }}</td>
+        <td class="mono">{{ entity.basis or '—' }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  <table class="tbl tbl-tight">
+    <thead><tr><th>台账分录</th><th>主体</th><th class="num">应付(元)</th><th>说明</th></tr></thead>
+    <tbody>
+      {% for entry in master.ledger %}
+      {% if entry.payable_amount != '0.00' %}
+      <tr>
+        <td class="mono">{{ entry.entry_id }}</td>
+        <td class="mono">{{ entry.entity_id }}</td>
+        <td class="num">{{ entry.payable_amount|money }}</td>
+        <td>{{ entry.detail }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">尚未发布正式主数据。批准案件后即可一次性切换。</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2 class="panel-title">发布回执与旧版保全</h2>
+    <div class="panel-num">{{ receipts|length }} 份回执 · {{ snapshots|length }} 份整版快照</div>
+  </div>
+  <div class="grid-two">
+    <table class="tbl tbl-tight">
+      <thead><tr><th>回执</th><th>版本</th><th>状态</th><th>计划摘要</th></tr></thead>
+      <tbody>
+        {% for item in receipts %}
+        <tr>
+          <td class="mono">{{ item.receipt_id }}</td>
+          <td class="num">{{ item.version }}</td>
+          <td>{{ item.state }}</td>
+          <td class="mono">{{ item.payload_sha256[:12] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <table class="tbl tbl-tight">
+      <thead><tr><th>快照版本</th><th>状态</th><th>原因</th><th class="spacer"></th></tr></thead>
+      <tbody>
+        {% for item in snapshots %}
+        <tr>
+          <td class="num">{{ item.version }}</td>
+          <td>{{ item.state }}</td>
+          <td>{{ item.reason }}</td>
+          <td><button type="button" class="btn btn-sm btn-ghost" data-restore="{{ item.version }}">恢复此版</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

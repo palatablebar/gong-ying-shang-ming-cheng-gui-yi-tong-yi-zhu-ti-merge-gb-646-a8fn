@@ -81,6 +81,45 @@
           expected_version: version
         }).then(function () { window.location.reload(); });
       });
+      return;
+    }
+
+    var scase = event.target.closest('[data-scase]');
+    if (scase) {
+      var caseId = scase.getAttribute('data-scase');
+      var caseVersion = parseInt(scase.getAttribute('data-version'), 10);
+      run(scase, function () {
+        return postJson('/api/succession/' + encodeURIComponent(caseId) + '/decision', {
+          verdict: scase.getAttribute('data-verdict'),
+          expected_version: caseVersion
+        }).then(function () { window.location.reload(); });
+      });
+      return;
+    }
+
+    var publish = event.target.closest('[data-publish]');
+    if (publish) {
+      run(publish, function () {
+        return postJson('/api/succession/publish', {
+          payload_sha256: publish.getAttribute('data-sha'),
+          expected_prior_version: parseInt(publish.getAttribute('data-prior'), 10)
+        }).then(function (payload) {
+          var receipt = payload.receipt;
+          showError('已发布 ' + receipt.receipt_id + ' → 版本 ' + receipt.version
+            + '（主体 ' + (receipt.counts ? receipt.counts.entities : '?') + '）');
+          setTimeout(function () { window.location.reload(); }, 700);
+        });
+      });
+      return;
+    }
+
+    var restore = event.target.closest('[data-restore]');
+    if (restore) {
+      if (!window.confirm('恢复旧版会生成一个新版本，当前版本仍会保留。确认恢复？')) { return; }
+      run(restore, function () {
+        return postJson('/api/succession/restore/' + restore.getAttribute('data-restore'), {})
+          .then(function () { window.location.reload(); });
+      });
     }
   });
 

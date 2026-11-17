@@ -57,7 +57,15 @@
 .sub { display: block; color: var(--ink-muted); font-size: 11px; }
 .panel > .tbl { border-bottom: 1px solid var(--line); }
 .panel > .grid-two, .panel > .btn-row, .panel > .form, .panel > .stat-line,
-.panel > .bar-row, .panel > .empty { margin: 12px 12px 0; }
+.panel > .bar-row, .panel > .empty, .panel > .notice { margin: 12px 12px 0; }
+.notice {
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--ink-muted);
+  background: var(--surface-2);
+  border-left: 2px solid var(--accent);
+  padding: 6px 10px;
+}
 
 .tag {
   display: inline-block;
